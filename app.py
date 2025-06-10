@@ -3,8 +3,10 @@ from flask_cors import CORS
 from waitress import serve
 import google.generativeai as genai
 import os
+import requests
 from dotenv import load_dotenv
 import fitz  # PyMuPDF
+from io import BytesIO
 
 load_dotenv()
 
@@ -15,13 +17,22 @@ CORS(app)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=GEMINI_API_KEY)
 
-# مدل مورد استفاده (می‌توان Flash یا Pro انتخاب کرد)
+# مدل مورد استفاده
 model = genai.GenerativeModel("gemini-1.5-flash")
 
-def extract_text_from_pdf(pdf_file):
-    """استخراج متن از فایل PDF"""
+# URL فایل PDF در GitHub (خام)
+PDF_GITHUB_URL = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/BRANCH/PATH_TO_PDF.pdf"
+
+def extract_text_from_pdf_from_url(url):
+    """دانلود و استخراج متن PDF از GitHub"""
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise Exception("خطا در دانلود PDF از GitHub")
+    
+    file_like = BytesIO(response.content)
+    doc = fitz.open(stream=file_like, filetype="pdf")
+    
     text = ""
-    doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
     for page in doc:
         text += page.get_text()
     return text.strip()
@@ -33,18 +44,10 @@ def chat():
         if not user_msg:
             return jsonify({"error": "No message provided"}), 400
 
-        if "file" not in request.files:
-            return jsonify({"error": "No file uploaded"}), 400
-
-        file = request.files["file"]
-        if not file.filename.endswith(".pdf"):
-            return jsonify({"error": "Invalid file type. Please upload a PDF file."}), 400
-
-        pdf_text = extract_text_from_pdf(file)
+        pdf_text = extract_text_from_pdf_from_url(PDF_GITHUB_URL)
         if not pdf_text:
             return jsonify({"error": "Failed to extract text from PDF."}), 500
 
-        # ساخت پرامپت برای AI
         prompt = f"""
         محتوای فایل PDF به شرح زیر است:
 
